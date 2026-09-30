@@ -15,7 +15,7 @@ public class DatabaseConnection {
             "parking_app";
 
     private static final String PASSWORD =
-            "  ";
+            "root";
 
     private DatabaseConnection() {
     }

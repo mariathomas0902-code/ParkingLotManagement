@@ -12,12 +12,13 @@ public class ParkingSpaceDAO {
             throws SQLException {
 
         String sql = """
-                SELECT space_id
-                FROM parking_spaces
-                WHERE vehicle_type = ?
-                  AND status = 'AVAILABLE'
-                LIMIT 1
-                """;
+        SELECT slot_id
+        FROM parking_spaces
+        WHERE supported_type = ?
+        AND status = 'AVAILABLE'
+        ORDER BY slot_id
+        LIMIT 1
+        """;
 
         try (
                 Connection connection =
