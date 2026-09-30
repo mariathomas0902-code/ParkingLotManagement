@@ -12,75 +12,53 @@ public class Main {
 
     public static void main(String[] args) {
 
-        int choice;
+        boolean running = true;
 
-        do {
+        System.out.println(
+                "Parking Lot Management System Started"
+        );
+
+        while (running) {
             displayMenu();
-            choice = readInteger("Enter your choice: ");
+
+            String choice =
+                    scanner.nextLine().trim();
 
             switch (choice) {
-
-                case 1:
-                    addParkingSpace();
+                case "1":
+                    parkVehicle();
                     break;
 
-                case 2:
-                    service.displayParkingSpaces();
+                case "2":
+                    exitVehicle();
                     break;
 
-                case 3:
-                    registerCustomer();
+                case "3":
+                    service.showAvailableSpaces();
                     break;
 
-                case 4:
-                    registerVehicle();
+                case "4":
+                    service.showParkedVehicles();
                     break;
 
-                case 5:
-                    vehicleEntry();
+                case "5":
+                    service.showTransactionHistory();
                     break;
 
-                case 6:
-                    vehicleExit();
-                    break;
+                case "0":
+                    running = false;
 
-                case 7:
-                    searchVehicle();
-                    break;
-
-                case 8:
-                    service.displayAvailableSpaces();
-                    break;
-
-                case 9:
-                    service.displayCustomers();
-                    break;
-
-                case 10:
-                    service.displayVehicles();
-                    break;
-
-                case 11:
-                    service.displayTransactions();
-                    break;
-
-                case 12:
-                    service.displayTotalCollection();
-                    break;
-
-                case 0:
                     System.out.println(
-                            "Thank you. Program closed."
+                            "Application closed."
                     );
                     break;
 
                 default:
                     System.out.println(
-                            "Invalid choice. Please try again."
+                            "Invalid choice. Enter 0 to 5."
                     );
             }
-
-        } while (choice != 0);
+        }
 
         scanner.close();
     }
@@ -88,128 +66,86 @@ public class Main {
     private static void displayMenu() {
 
         System.out.println(
-                "\n=================================="
+                "\n===== PARKING LOT MANAGEMENT ====="
         );
-        System.out.println(
-                "   PARKING LOT MANAGEMENT SYSTEM"
-        );
-        System.out.println(
-                "=================================="
-        );
-        System.out.println("1. Add Parking Space");
-        System.out.println("2. View All Parking Spaces");
-        System.out.println("3. Register Customer");
-        System.out.println("4. Register Vehicle");
-        System.out.println("5. Vehicle Entry");
-        System.out.println("6. Vehicle Exit");
-        System.out.println("7. Search Vehicle");
-        System.out.println("8. View Available Spaces");
-        System.out.println("9. View Customers");
-        System.out.println("10. View Vehicles");
-        System.out.println("11. View Transactions");
-        System.out.println("12. View Total Collection");
+
+        System.out.println("1. Park Vehicle");
+        System.out.println("2. Exit Vehicle");
+        System.out.println("3. View Available Spaces");
+        System.out.println("4. View Parked Vehicles");
+        System.out.println("5. View Transaction History");
         System.out.println("0. Exit");
+
+        System.out.print("Enter your choice: ");
     }
 
-    private static void addParkingSpace() {
+    private static void parkVehicle() {
 
-        int slotId =
-                readInteger("Enter parking slot ID: ");
+        String customerName =
+                readRequiredInput("Customer name: ");
+
+        String phoneNumber =
+                readPhoneNumber();
+
+        String vehicleNumber =
+                readRequiredInput("Vehicle number: ")
+                        .toUpperCase();
 
         VehicleType vehicleType =
                 readVehicleType();
 
-        service.addParkingSpace(
-                slotId,
+        service.parkVehicle(
+                customerName,
+                phoneNumber,
+                vehicleNumber,
                 vehicleType
         );
     }
 
-    private static void registerCustomer() {
+    private static void exitVehicle() {
 
-        int customerId =
-                readInteger("Enter customer ID: ");
+        String vehicleNumber =
+                readRequiredInput("Vehicle number: ")
+                        .toUpperCase();
 
-        System.out.print("Enter customer name: ");
-        String name = scanner.nextLine().trim();
-
-        System.out.print("Enter phone number: ");
-        String phone = scanner.nextLine().trim();
-
-        System.out.print("Enter email address: ");
-        String email = scanner.nextLine().trim();
-
-        service.registerCustomer(
-                customerId,
-                name,
-                phone,
-                email
-        );
+        service.exitVehicle(vehicleNumber);
     }
 
-    private static void registerVehicle() {
+    private static String readRequiredInput(
+            String message
+    ) {
+        while (true) {
+            System.out.print(message);
 
-        System.out.print(
-                "Enter vehicle registration number: "
-        );
+            String value =
+                    scanner.nextLine().trim();
 
-        String registrationNumber =
-                scanner.nextLine().trim();
+            if (!value.isEmpty()) {
+                return value;
+            }
 
-        VehicleType vehicleType =
-                readVehicleType();
-
-        int customerId =
-                readInteger("Enter owner customer ID: ");
-
-        service.registerVehicle(
-                registrationNumber,
-                vehicleType,
-                customerId
-        );
-    }
-
-    private static void vehicleEntry() {
-
-        System.out.print(
-                "Enter vehicle registration number: "
-        );
-
-        String registrationNumber =
-                scanner.nextLine().trim();
-
-        service.vehicleEntry(registrationNumber);
-    }
-
-    private static void vehicleExit() {
-
-        System.out.print(
-                "Enter vehicle registration number: "
-        );
-
-        String registrationNumber =
-                scanner.nextLine().trim();
-
-        service.vehicleExit(registrationNumber);
-    }
-
-    private static void searchVehicle() {
-
-        System.out.print(
-                "Enter vehicle registration number: "
-        );
-
-        String registrationNumber =
-                scanner.nextLine().trim();
-
-        Vehicle vehicle =
-                service.findVehicle(registrationNumber);
-
-        if (vehicle == null) {
-            System.out.println("Vehicle not found.");
-        } else {
             System.out.println(
-                    "Vehicle found:\n" + vehicle
+                    "This field cannot be empty."
+            );
+        }
+    }
+
+    private static String readPhoneNumber() {
+
+        while (true) {
+            System.out.print(
+                    "Phone number (10 digits): "
+            );
+
+            String phone =
+                    scanner.nextLine().trim();
+
+            if (phone.matches("\\d{10}")) {
+                return phone;
+            }
+
+            System.out.println(
+                    "Enter a valid 10-digit phone number."
             );
         }
     }
@@ -217,48 +153,21 @@ public class Main {
     private static VehicleType readVehicleType() {
 
         while (true) {
+            System.out.print(
+                    "Vehicle type (BIKE/CAR): "
+            );
 
-            System.out.println("Select vehicle type:");
-            System.out.println("1. Bike");
-            System.out.println("2. Car");
-            System.out.println("3. Truck");
-
-            int typeChoice =
-                    readInteger("Enter vehicle type: ");
-
-            switch (typeChoice) {
-
-                case 1:
-                    return VehicleType.BIKE;
-
-                case 2:
-                    return VehicleType.CAR;
-
-                case 3:
-                    return VehicleType.TRUCK;
-
-                default:
-                    System.out.println(
-                            "Invalid vehicle type."
-                    );
-            }
-        }
-    }
-
-    private static int readInteger(String message) {
-
-        while (true) {
-
-            System.out.print(message);
-            String input = scanner.nextLine().trim();
+            String input =
+                    scanner.nextLine()
+                            .trim()
+                            .toUpperCase();
 
             try {
-                return Integer.parseInt(input);
+                return VehicleType.valueOf(input);
 
-            } catch (NumberFormatException exception) {
-
+            } catch (IllegalArgumentException exception) {
                 System.out.println(
-                        "Please enter a valid number."
+                        "Invalid type. Enter BIKE or CAR."
                 );
             }
         }

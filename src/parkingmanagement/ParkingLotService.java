@@ -1,385 +1,272 @@
 package parkingmanagement;
 
-import java.time.Duration;
+import parkingmanagement.dao.CustomerDAO;
+import parkingmanagement.dao.ParkingSpaceDAO;
+import parkingmanagement.dao.ParkingTransactionDAO;
+import parkingmanagement.dao.ParkingTransactionDAO.ActiveTransaction;
+
+import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 
 public class ParkingLotService {
 
-    private final ArrayList<ParkingSpace> parkingSpaces;
-    private final ArrayList<Customer> customers;
-    private final ArrayList<Vehicle> vehicles;
-    private final ArrayList<ParkingTransaction> transactions;
-
-    private int nextTicketId;
+    private final CustomerDAO customerDAO;
+    private final ParkingSpaceDAO parkingSpaceDAO;
+    private final ParkingTransactionDAO transactionDAO;
 
     public ParkingLotService() {
-        parkingSpaces = new ArrayList<>();
-        customers = new ArrayList<>();
-        vehicles = new ArrayList<>();
-        transactions = new ArrayList<>();
-
-        nextTicketId = 1001;
+        customerDAO = new CustomerDAO();
+        parkingSpaceDAO = new ParkingSpaceDAO();
+        transactionDAO = new ParkingTransactionDAO();
     }
 
-    public void addParkingSpace(
-            int slotId,
-            VehicleType vehicleType) {
+    /*
+     * Parks a vehicle.
+     */
+    public void parkVehicle(
+            String customerName,
+            String phoneNumber,
+            String vehicleNumber,
+            VehicleType vehicleType
+    ) {
+        try {
+            vehicleNumber =
+                    vehicleNumber.trim().toUpperCase();
 
-        if (findParkingSpace(slotId) != null) {
-            System.out.println(
-                    "A parking space with this ID already exists."
-            );
-            return;
-        }
+            // Check whether this vehicle is already parked
+            ActiveTransaction existingTransaction =
+                    transactionDAO.findActiveTransaction(
+                            vehicleNumber
+                    );
 
-        ParkingSpace parkingSpace =
-                new ParkingSpace(slotId, vehicleType);
-
-        parkingSpaces.add(parkingSpace);
-
-        System.out.println(
-                "Parking space added successfully."
-        );
-    }
-
-    public void registerCustomer(
-            int customerId,
-            String name,
-            String phone,
-            String email) {
-
-        if (findCustomer(customerId) != null) {
-            System.out.println(
-                    "A customer with this ID already exists."
-            );
-            return;
-        }
-
-        Customer customer =
-                new Customer(
-                        customerId,
-                        name,
-                        phone,
-                        email
+            if (existingTransaction != null) {
+                System.out.println(
+                        "This vehicle is already parked."
                 );
+                return;
+            }
 
-        customers.add(customer);
+            // Find an available parking space
+            Integer spaceId =
+                    parkingSpaceDAO.findAvailableSpace(
+                            vehicleType.name()
+                    );
 
-        System.out.println(
-                "Customer registered successfully."
-        );
-    }
-
-    public void registerVehicle(
-            String registrationNumber,
-            VehicleType vehicleType,
-            int customerId) {
-
-        registrationNumber =
-                registrationNumber.toUpperCase();
-
-        if (findVehicle(registrationNumber) != null) {
-            System.out.println(
-                    "This vehicle is already registered."
-            );
-            return;
-        }
-
-        Customer customer = findCustomer(customerId);
-
-        if (customer == null) {
-            System.out.println(
-                    "Customer not found. Register the customer first."
-            );
-            return;
-        }
-
-        Vehicle vehicle =
-                new Vehicle(
-                        registrationNumber,
-                        vehicleType,
-                        customer
+            if (spaceId == null) {
+                System.out.println(
+                        "No available space for "
+                                + vehicleType
+                                + "."
                 );
+                return;
+            }
 
-        vehicles.add(vehicle);
+            // Check whether customer already exists
+            Integer customerId =
+                    customerDAO.findCustomerIdByVehicleNumber(
+                            vehicleNumber
+                    );
 
-        System.out.println(
-                "Vehicle registered successfully."
-        );
-    }
-
-    public void vehicleEntry(
-            String registrationNumber) {
-
-        Vehicle vehicle =
-                findVehicle(registrationNumber);
-
-        if (vehicle == null) {
-            System.out.println(
-                    "Vehicle not found. Register it first."
-            );
-            return;
-        }
-
-        if (findActiveTransaction(
-                vehicle.getRegistrationNumber()) != null) {
-
-            System.out.println(
-                    "This vehicle is already inside the parking lot."
-            );
-            return;
-        }
-
-        ParkingSpace availableSpace =
-                findAvailableParkingSpace(
-                        vehicle.getVehicleType()
+            // Add the customer if not already present
+            if (customerId == null) {
+                customerId = customerDAO.addCustomer(
+                        customerName,
+                        phoneNumber,
+                        vehicleNumber,
+                        vehicleType.name()
                 );
+            }
 
-        if (availableSpace == null) {
-            System.out.println(
-                    "No suitable parking space is available."
+            // Create parking transaction
+            int transactionId =
+                    transactionDAO.createTransaction(
+                            customerId,
+                            spaceId
+                    );
+
+            // Mark the space as occupied
+            parkingSpaceDAO.updateSpaceStatus(
+                    spaceId,
+                    "OCCUPIED"
             );
-            return;
+
+            System.out.println(
+                    "\nVehicle parked successfully."
+            );
+
+            System.out.println(
+                    "Transaction ID : " + transactionId
+            );
+
+            System.out.println(
+                    "Vehicle Number : " + vehicleNumber
+            );
+
+            System.out.println(
+                    "Vehicle Type   : " + vehicleType
+            );
+
+            System.out.println(
+                    "Parking Space ID: " + spaceId
+            );
+
+        } catch (SQLException exception) {
+            System.out.println(
+                    "Could not park the vehicle."
+            );
+
+            System.out.println(
+                    "Reason: " + exception.getMessage()
+            );
         }
+    }
 
-        availableSpace.occupy();
+    /*
+     * Processes vehicle exit and calculates the fee.
+     */
+    public void exitVehicle(String vehicleNumber) {
+        try {
+            vehicleNumber =
+                    vehicleNumber.trim().toUpperCase();
 
-        ParkingTransaction transaction =
-                new ParkingTransaction(
-                        nextTicketId,
-                        vehicle,
-                        availableSpace
+            ActiveTransaction transaction =
+                    transactionDAO.findActiveTransaction(
+                            vehicleNumber
+                    );
+
+            if (transaction == null) {
+                System.out.println(
+                        "No active parking record found "
+                                + "for vehicle "
+                                + vehicleNumber
                 );
+                return;
+            }
 
-        transactions.add(transaction);
-        nextTicketId++;
+            LocalDateTime exitTime =
+                    LocalDateTime.now();
 
-        System.out.println("\nVehicle entry successful.");
-        System.out.println("Parking ticket:");
-        System.out.println(transaction);
+            VehicleType vehicleType =
+                    VehicleType.valueOf(
+                            transaction.vehicleType()
+                                    .toUpperCase()
+                    );
 
-    }
+            double fee =
+                    FeeCalculator.calculateFee(
+                            vehicleType,
+                            transaction.entryTime(),
+                            exitTime
+                    );
 
-    public void vehicleExit(String registrationNumber) {
+            boolean completed =
+                    transactionDAO.completeTransaction(
+                            transaction.transactionId(),
+                            fee
+                    );
 
-        ParkingTransaction transaction =
-                findActiveTransaction(registrationNumber);
-
-        if (transaction == null) {
-            System.out.println(
-                    "No active transaction found for this vehicle."
-            );
-            return;
-        }
-
-        LocalDateTime exitTime = LocalDateTime.now();
-
-        long parkedMinutes =
-                Duration.between(
-                        transaction.getEntryTime(),
-                        exitTime
-                ).toMinutes();
-
-        long chargedHours =
-                (long) Math.ceil(parkedMinutes / 60.0);
-
-        if (chargedHours < 1) {
-            chargedHours = 1;
-        }
-
-        double fee =
-                FeeCalculator.calculateFee(
-                        transaction
-                                .getVehicle()
-                                .getVehicleType(),
-                        chargedHours
+            if (!completed) {
+                System.out.println(
+                        "Vehicle exit could not be completed."
                 );
-
-        transaction.closeTransaction(exitTime, fee);
-        transaction.getParkingSpace().release();
-
-        System.out.println("\nVehicle exit successful.");
-        System.out.println("Payment receipt:");
-        System.out.println(transaction);
-        System.out.println("Charged Hours: " + chargedHours);
-    }
-
-    public ParkingSpace findParkingSpace(int slotId) {
-
-        for (ParkingSpace parkingSpace : parkingSpaces) {
-
-            if (parkingSpace.getSlotId() == slotId) {
-                return parkingSpace;
+                return;
             }
-        }
 
-        return null;
-    }
-
-    public Customer findCustomer(int customerId) {
-
-        for (Customer customer : customers) {
-
-            if (customer.getCustomerId() == customerId) {
-                return customer;
-            }
-        }
-
-        return null;
-    }
-
-    public Vehicle findVehicle(
-            String registrationNumber) {
-
-        for (Vehicle vehicle : vehicles) {
-
-            if (vehicle.getRegistrationNumber()
-                    .equalsIgnoreCase(registrationNumber)) {
-
-                return vehicle;
-            }
-        }
-
-        return null;
-    }
-
-    private ParkingSpace findAvailableParkingSpace(
-            VehicleType vehicleType) {
-
-        for (ParkingSpace parkingSpace : parkingSpaces) {
-
-            if (parkingSpace.isAvailable()
-                    && parkingSpace.getSupportedType()
-                    == vehicleType) {
-
-                return parkingSpace;
-            }
-        }
-
-        return null;
-    }
-
-    private ParkingTransaction findActiveTransaction(
-            String registrationNumber) {
-
-        for (ParkingTransaction transaction : transactions) {
-
-            boolean sameVehicle =
-                    transaction.getVehicle()
-                            .getRegistrationNumber()
-                            .equalsIgnoreCase(
-                                    registrationNumber
-                            );
-
-            if (sameVehicle && transaction.isActive()) {
-                return transaction;
-            }
-        }
-
-        return null;
-    }
-
-    public void displayParkingSpaces() {
-
-        if (parkingSpaces.isEmpty()) {
-            System.out.println(
-                    "No parking spaces have been added."
+            parkingSpaceDAO.updateSpaceStatus(
+                    transaction.spaceId(),
+                    "AVAILABLE"
             );
-            return;
-        }
 
-        System.out.println("\nPARKING SPACES");
-
-        for (ParkingSpace parkingSpace : parkingSpaces) {
-            System.out.println(parkingSpace);
-        }
-    }
-
-    public void displayCustomers() {
-
-        if (customers.isEmpty()) {
             System.out.println(
-                    "No customers have been registered."
+                    "\nVehicle exit completed successfully."
             );
-            return;
-        }
 
-        System.out.println("\nREGISTERED CUSTOMERS");
-
-        for (Customer customer : customers) {
-            System.out.println(customer);
-        }
-    }
-
-    public void displayVehicles() {
-
-        if (vehicles.isEmpty()) {
             System.out.println(
-                    "No vehicles have been registered."
+                    "Vehicle Number : " + vehicleNumber
             );
-            return;
-        }
 
-        System.out.println("\nREGISTERED VEHICLES");
-
-        for (Vehicle vehicle : vehicles) {
-            System.out.println(vehicle);
-        }
-    }
-
-    public void displayTransactions() {
-
-        if (transactions.isEmpty()) {
             System.out.println(
-                    "No parking transactions found."
+                    "Parking Space  : "
+                            + transaction.spaceNumber()
             );
-            return;
-        }
 
-        System.out.println("\nPARKING TRANSACTIONS");
-
-        for (ParkingTransaction transaction : transactions) {
-            System.out.println(transaction);
-            System.out.println("-------------------------");
-        }
-    }
-
-    public void displayAvailableSpaces() {
-
-        boolean found = false;
-
-        System.out.println("\nAVAILABLE PARKING SPACES");
-
-        for (ParkingSpace parkingSpace : parkingSpaces) {
-
-            if (parkingSpace.isAvailable()) {
-                System.out.println(parkingSpace);
-                found = true;
-            }
-        }
-
-        if (!found) {
             System.out.println(
-                    "No parking spaces are available."
+                    "Entry Time     : "
+                            + transaction.entryTime()
+            );
+
+            System.out.println(
+                    "Exit Time      : " + exitTime
+            );
+
+            System.out.printf(
+                    "Parking Fee    : Rs. %.2f%n",
+                    fee
+            );
+
+        } catch (IllegalArgumentException exception) {
+            System.out.println(
+                    "Invalid vehicle type in database."
+            );
+
+        } catch (SQLException exception) {
+            System.out.println(
+                    "Could not complete vehicle exit."
+            );
+
+            System.out.println(
+                    "Reason: " + exception.getMessage()
             );
         }
     }
 
-    public void displayTotalCollection() {
+    /*
+     * Displays currently parked vehicles.
+     */
+    public void showParkedVehicles() {
+        try {
+            transactionDAO.displayActiveTransactions();
 
-        double total = 0;
+        } catch (SQLException exception) {
+            System.out.println(
+                    "Could not display parked vehicles."
+            );
 
-        for (ParkingTransaction transaction : transactions) {
-
-            if (!transaction.isActive()) {
-                total += transaction.getParkingFee();
-            }
+            System.out.println(
+                    "Reason: " + exception.getMessage()
+            );
         }
+    }
 
-        System.out.printf(
-                "Total Parking Fees Collected: Rs. %.2f%n",
-                total
-        );
+    /*
+     * Displays all parking transaction history.
+     */
+    public void showTransactionHistory() {
+        try {
+            transactionDAO.displayTransactionHistory();
+
+        } catch (SQLException exception) {
+            System.out.println(
+                    "Could not display transaction history."
+            );
+
+            System.out.println(
+                    "Reason: " + exception.getMessage()
+            );
+        }
+    }
+    public void showAvailableSpaces() {
+        try {
+            parkingSpaceDAO.displayAvailableSpaces();
+
+        } catch (SQLException exception) {
+            System.out.println(
+                    "Could not display available spaces."
+            );
+
+            System.out.println(
+                    "Reason: " + exception.getMessage()
+            );
+        }
     }
 }
