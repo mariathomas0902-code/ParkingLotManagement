@@ -24,15 +24,16 @@ public class ParkingTransactionDAO {
     ) {
     }
 
-    // Create a new parking transaction
+    // The vehicle must already exist in the vehicles table.
+    // Pass its registration number, not the customer ID.
     public int createTransaction(
-            int customerId,
-            int spaceId
+            String vehicleNumber,
+            int slot_id
     ) throws SQLException {
 
         String sql = """
                 INSERT INTO parking_transactions
-                (customer_id, space_id, entry_time,
+                (registration_number, slot_id, entry_time,
                  transaction_status)
                 VALUES (?, ?, NOW(), 'ACTIVE')
                 """;
@@ -47,8 +48,8 @@ public class ParkingTransactionDAO {
                                 Statement.RETURN_GENERATED_KEYS
                         )
         ) {
-            statement.setInt(1, customerId);
-            statement.setInt(2, spaceId);
+            statement.setString(1, vehicleNumber);
+            statement.setInt(2, slot_id);
 
             int affectedRows = statement.executeUpdate();
 
@@ -79,19 +80,19 @@ public class ParkingTransactionDAO {
 
         String sql = """
                 SELECT
-                    pt.transaction_id,
-                    pt.space_id,
-                    ps.space_number,
-                    c.vehicle_type,
+                    pt.ticket_id,
+                    pt.slot_id,
+                    ps.slot_id AS space_number,
+                    v.vehicle_type,
                     pt.entry_time
                 FROM parking_transactions pt
-                JOIN customers c
-                    ON pt.customer_id = c.customer_id
+                JOIN vehicles v
+                    ON pt.registration_number = v.registration_number
                 JOIN parking_spaces ps
-                    ON pt.space_id = ps.space_id
-                WHERE c.vehicle_number = ?
+                    ON pt.slot_id = ps.slot_id
+                WHERE pt.registration_number = ?
                   AND pt.transaction_status = 'ACTIVE'
-                ORDER BY pt.transaction_id DESC
+                ORDER BY pt.ticket_id DESC
                 LIMIT 1
                 """;
 
@@ -109,8 +110,8 @@ public class ParkingTransactionDAO {
 
                 if (resultSet.next()) {
                     return new ActiveTransaction(
-                            resultSet.getInt("transaction_id"),
-                            resultSet.getInt("space_id"),
+                            resultSet.getInt("ticket_id"),
+                            resultSet.getInt("slot_id"),
                             resultSet.getString("space_number"),
                             resultSet.getString("vehicle_type"),
                             resultSet.getTimestamp("entry_time")
@@ -134,7 +135,7 @@ public class ParkingTransactionDAO {
                 SET exit_time = NOW(),
                     parking_fee = ?,
                     transaction_status = 'COMPLETED'
-                WHERE transaction_id = ?
+                WHERE ticket_id = ?
                   AND transaction_status = 'ACTIVE'
                 """;
 
@@ -158,17 +159,19 @@ public class ParkingTransactionDAO {
 
         String sql = """
                 SELECT
-                    pt.transaction_id,
-                    c.customer_name,
-                    c.vehicle_number,
-                    c.vehicle_type,
-                    ps.space_number,
+                    pt.ticket_id,
+                    c.name AS customer_name,
+                    pt.registration_number AS vehicle_number,
+                    v.vehicle_type,
+                    ps.slot_id AS space_number,
                     pt.entry_time
                 FROM parking_transactions pt
-                JOIN customers c
-                    ON pt.customer_id = c.customer_id
+                JOIN vehicles v
+                    ON pt.registration_number = v.registration_number
+                LEFT JOIN customers c
+                    ON v.customer_id = c.customer_id
                 JOIN parking_spaces ps
-                    ON pt.space_id = ps.space_id
+                    ON pt.slot_id = ps.slot_id
                 WHERE pt.transaction_status = 'ACTIVE'
                 ORDER BY pt.entry_time
                 """;
@@ -194,7 +197,7 @@ public class ParkingTransactionDAO {
 
                 System.out.println(
                         "Transaction ID : "
-                                + resultSet.getInt("transaction_id")
+                                + resultSet.getInt("ticket_id")
                 );
 
                 System.out.println(
@@ -239,19 +242,17 @@ public class ParkingTransactionDAO {
 
         String sql = """
                 SELECT
-                    pt.transaction_id,
-                    c.vehicle_number,
-                    ps.space_number,
+                    pt.ticket_id,
+                    pt.registration_number AS vehicle_number,
+                    ps.slot_id AS space_number,
                     pt.entry_time,
                     pt.exit_time,
                     pt.parking_fee,
                     pt.transaction_status
                 FROM parking_transactions pt
-                JOIN customers c
-                    ON pt.customer_id = c.customer_id
                 JOIN parking_spaces ps
-                    ON pt.space_id = ps.space_id
-                ORDER BY pt.transaction_id DESC
+                    ON pt.slot_id = ps.slot_id
+                ORDER BY pt.ticket_id DESC
                 """;
 
         try (
@@ -275,7 +276,7 @@ public class ParkingTransactionDAO {
 
                 System.out.println(
                         "Transaction ID : "
-                                + resultSet.getInt("transaction_id")
+                                + resultSet.getInt("ticket_id")
                 );
 
                 System.out.println(

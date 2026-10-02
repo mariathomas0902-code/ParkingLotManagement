@@ -7,10 +7,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Locale;
 
 public class CustomerDAO {
 
-    // Add a customer and return the generated customer ID
+    // Save the customer and vehicle together.
+    // Return the generated customer ID.
     public int addCustomer(
             String customerName,
             String phoneNumber,
@@ -18,72 +20,107 @@ public class CustomerDAO {
             String vehicleType
     ) throws SQLException {
 
-        String sql = """
-                INSERT INTO customers
-                (customer_name, phone_number, vehicle_number, vehicle_type)
-                VALUES (?, ?, ?, ?)
+        String customerSql = """
+                INSERT INTO customers (name, phone_number)
+                VALUES (?, ?)
                 """;
 
-        try (
-                Connection connection =
-                        DatabaseConnection.getConnection();
+        String vehicleSql = """
+                INSERT INTO vehicles
+                    (registration_number, vehicle_type, customer_id)
+                VALUES (?, ?, ?)
+                """;
 
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                sql,
-                                Statement.RETURN_GENERATED_KEYS
-                        )
-        ) {
-            statement.setString(1, customerName);
-            statement.setString(2, phoneNumber);
-            statement.setString(3, vehicleNumber);
-            statement.setString(4, vehicleType);
+        vehicleNumber = vehicleNumber.trim().toUpperCase(Locale.ROOT);
+        vehicleType = vehicleType.trim().toUpperCase(Locale.ROOT);
 
-            int affectedRows = statement.executeUpdate();
+        try (Connection connection = DatabaseConnection.getConnection()) {
 
-            if (affectedRows == 0) {
-                throw new SQLException(
-                        "Customer could not be inserted."
-                );
-            }
+            // Both inserts must succeed before saving.
+            connection.setAutoCommit(false);
 
-            try (ResultSet generatedKeys =
-                         statement.getGeneratedKeys()) {
+            try {
+                int customerId;
 
-                if (generatedKeys.next()) {
-                    return generatedKeys.getInt(1);
+                try (PreparedStatement statement =
+                             connection.prepareStatement(
+                                     customerSql,
+                                     Statement.RETURN_GENERATED_KEYS
+                             )) {
+
+                    statement.setString(1, customerName.trim());
+                    statement.setString(2, phoneNumber.trim());
+
+                    if (statement.executeUpdate() != 1) {
+                        throw new SQLException(
+                                "Customer could not be inserted."
+                        );
+                    }
+
+                    try (ResultSet keys = statement.getGeneratedKeys()) {
+                        if (!keys.next()) {
+                            throw new SQLException(
+                                    "Customer ID was not generated. "
+                                            + "Check customer_id AUTO_INCREMENT."
+                            );
+                        }
+
+                        customerId = keys.getInt(1);
+                    }
                 }
+
+                // Link the vehicle to the newly created customer.
+                try (PreparedStatement statement =
+                             connection.prepareStatement(vehicleSql)) {
+
+                    statement.setString(1, vehicleNumber);
+                    statement.setString(2, vehicleType);
+                    statement.setInt(3, customerId);
+
+                    if (statement.executeUpdate() != 1) {
+                        throw new SQLException(
+                                "Vehicle could not be inserted."
+                        );
+                    }
+                }
+
+                connection.commit();
+                return customerId;
+
+            } catch (SQLException exception) {
+                // Undo the customer insert if vehicle insertion fails.
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackException) {
+                    exception.addSuppressed(rollbackException);
+                }
+
+                throw exception;
             }
         }
-
-        throw new SQLException(
-                "Customer ID was not generated."
-        );
     }
 
-    // Find customer ID using vehicle number
+    // Find the customer linked to a vehicle.
     public Integer findCustomerIdByVehicleNumber(
             String vehicleNumber
     ) throws SQLException {
 
         String sql = """
                 SELECT customer_id
-                FROM customers
-                WHERE vehicle_number = ?
+                FROM vehicles
+                WHERE registration_number = ?
                 """;
 
         try (
-                Connection connection =
-                        DatabaseConnection.getConnection();
-
-                PreparedStatement statement =
-                        connection.prepareStatement(sql)
+                Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)
         ) {
-            statement.setString(1, vehicleNumber);
+            statement.setString(
+                    1,
+                    vehicleNumber.trim().toUpperCase(Locale.ROOT)
+            );
 
-            try (ResultSet resultSet =
-                         statement.executeQuery()) {
-
+            try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
                     return resultSet.getInt("customer_id");
                 }
@@ -93,37 +130,39 @@ public class CustomerDAO {
         return null;
     }
 
-    // Display all customers
+    // Display customers and their linked vehicles.
     public void displayAllCustomers() throws SQLException {
 
         String sql = """
-                SELECT customer_id,
-                       customer_name,
-                       phone_number,
-                       vehicle_number,
-                       vehicle_type
-                FROM customers
-                ORDER BY customer_id
+                SELECT
+                    c.customer_id,
+                    c.name,
+                    c.phone_number,
+                    v.registration_number,
+                    v.vehicle_type
+                FROM customers c
+                LEFT JOIN vehicles v
+                    ON c.customer_id = v.customer_id
+                ORDER BY c.customer_id, v.registration_number
                 """;
 
         try (
-                Connection connection =
-                        DatabaseConnection.getConnection();
-
-                PreparedStatement statement =
-                        connection.prepareStatement(sql);
-
-                ResultSet resultSet =
-                        statement.executeQuery()
+                Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet resultSet = statement.executeQuery()
         ) {
-            System.out.println(
-                    "\n===== CUSTOMER LIST ====="
-            );
+            System.out.println("\n===== CUSTOMER LIST =====");
 
             boolean customerFound = false;
 
             while (resultSet.next()) {
                 customerFound = true;
+
+                String vehicleNumber =
+                        resultSet.getString("registration_number");
+
+                String vehicleType =
+                        resultSet.getString("vehicle_type");
 
                 System.out.println(
                         "Customer ID   : "
@@ -132,7 +171,7 @@ public class CustomerDAO {
 
                 System.out.println(
                         "Name          : "
-                                + resultSet.getString("customer_name")
+                                + resultSet.getString("name")
                 );
 
                 System.out.println(
@@ -142,12 +181,12 @@ public class CustomerDAO {
 
                 System.out.println(
                         "Vehicle Number: "
-                                + resultSet.getString("vehicle_number")
+                                + (vehicleNumber == null ? "-" : vehicleNumber)
                 );
 
                 System.out.println(
                         "Vehicle Type  : "
-                                + resultSet.getString("vehicle_type")
+                                + (vehicleType == null ? "-" : vehicleType)
                 );
 
                 System.out.println("-------------------------");

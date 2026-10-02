@@ -78,9 +78,10 @@ public class ParkingLotService {
             }
 
             // Create parking transaction
+            // Create parking transaction using the vehicle number
             int transactionId =
                     transactionDAO.createTransaction(
-                            customerId,
+                            vehicleNumber,
                             spaceId
                     );
 
@@ -255,6 +256,7 @@ public class ParkingLotService {
             );
         }
     }
+
     public void showAvailableSpaces() {
         try {
             parkingSpaceDAO.displayAvailableSpaces();
