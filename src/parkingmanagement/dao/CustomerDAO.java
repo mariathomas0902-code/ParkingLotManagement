@@ -1,18 +1,20 @@
 package parkingmanagement.dao;
 
 import parkingmanagement.DatabaseConnection;
+import parkingmanagement.VehicleType;
+import parkingmanagement.model.CustomerRecord;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class CustomerDAO {
 
-    // Save the customer and vehicle together.
-    // Return the generated customer ID.
     public int addCustomer(
             String customerName,
             String phoneNumber,
@@ -20,91 +22,81 @@ public class CustomerDAO {
             String vehicleType
     ) throws SQLException {
 
-        String customerSql = """
-                INSERT INTO customers (name, phone_number)
-                VALUES (?, ?)
-                """;
-
-        String vehicleSql = """
-                INSERT INTO vehicles
-                    (registration_number, vehicle_type, customer_id)
-                VALUES (?, ?, ?)
-                """;
-
         vehicleNumber = vehicleNumber.trim().toUpperCase(Locale.ROOT);
         vehicleType = vehicleType.trim().toUpperCase(Locale.ROOT);
 
         try (Connection connection = DatabaseConnection.getConnection()) {
-
-            // Both inserts must succeed before saving.
             connection.setAutoCommit(false);
 
             try {
-                int customerId;
-
-                try (PreparedStatement statement =
-                             connection.prepareStatement(
-                                     customerSql,
-                                     Statement.RETURN_GENERATED_KEYS
-                             )) {
-
-                    statement.setString(1, customerName.trim());
-                    statement.setString(2, phoneNumber.trim());
-
-                    if (statement.executeUpdate() != 1) {
-                        throw new SQLException(
-                                "Customer could not be inserted."
-                        );
-                    }
-
-                    try (ResultSet keys = statement.getGeneratedKeys()) {
-                        if (!keys.next()) {
-                            throw new SQLException(
-                                    "Customer ID was not generated. "
-                                            + "Check customer_id AUTO_INCREMENT."
-                            );
-                        }
-
-                        customerId = keys.getInt(1);
+                // Determine next customer_id in case table doesn't have auto_increment
+                int nextId = 1;
+                try (Statement idStmt = connection.createStatement();
+                     ResultSet idRs = idStmt.executeQuery("SELECT COALESCE(MAX(customer_id), 0) + 1 FROM customers")) {
+                    if (idRs.next()) {
+                        nextId = idRs.getInt(1);
                     }
                 }
 
-                // Link the vehicle to the newly created customer.
-                try (PreparedStatement statement =
-                             connection.prepareStatement(vehicleSql)) {
+                int customerId = nextId;
 
+                // Try inserting with explicit customer_id first (compatible with Dump20260929 schema)
+                String customerSql = """
+                        INSERT INTO customers (customer_id, name, phone_number)
+                        VALUES (?, ?, ?)
+                        """;
+
+                try (PreparedStatement statement = connection.prepareStatement(customerSql)) {
+                    statement.setInt(1, nextId);
+                    statement.setString(2, customerName.trim());
+                    statement.setString(3, phoneNumber.trim());
+                    statement.executeUpdate();
+                } catch (SQLException ex) {
+                    // Fallback to inserting without explicit ID if auto_increment is strictly configured
+                    String autoSql = """
+                            INSERT INTO customers (name, phone_number)
+                            VALUES (?, ?)
+                            """;
+                    try (PreparedStatement autoStmt = connection.prepareStatement(autoSql, Statement.RETURN_GENERATED_KEYS)) {
+                        autoStmt.setString(1, customerName.trim());
+                        autoStmt.setString(2, phoneNumber.trim());
+                        autoStmt.executeUpdate();
+                        try (ResultSet keys = autoStmt.getGeneratedKeys()) {
+                            if (keys.next()) {
+                                customerId = keys.getInt(1);
+                            }
+                        }
+                    }
+                }
+
+                // Link vehicle
+                String vehicleSql = """
+                        INSERT INTO vehicles (registration_number, vehicle_type, customer_id)
+                        VALUES (?, ?, ?)
+                        """;
+
+                try (PreparedStatement statement = connection.prepareStatement(vehicleSql)) {
                     statement.setString(1, vehicleNumber);
                     statement.setString(2, vehicleType);
                     statement.setInt(3, customerId);
-
-                    if (statement.executeUpdate() != 1) {
-                        throw new SQLException(
-                                "Vehicle could not be inserted."
-                        );
-                    }
+                    statement.executeUpdate();
                 }
 
                 connection.commit();
                 return customerId;
 
             } catch (SQLException exception) {
-                // Undo the customer insert if vehicle insertion fails.
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackException) {
                     exception.addSuppressed(rollbackException);
                 }
-
                 throw exception;
             }
         }
     }
 
-    // Find the customer linked to a vehicle.
-    public Integer findCustomerIdByVehicleNumber(
-            String vehicleNumber
-    ) throws SQLException {
-
+    public Integer findCustomerIdByVehicleNumber(String vehicleNumber) throws SQLException {
         String sql = """
                 SELECT customer_id
                 FROM vehicles
@@ -115,10 +107,7 @@ public class CustomerDAO {
                 Connection connection = DatabaseConnection.getConnection();
                 PreparedStatement statement = connection.prepareStatement(sql)
         ) {
-            statement.setString(
-                    1,
-                    vehicleNumber.trim().toUpperCase(Locale.ROOT)
-            );
+            statement.setString(1, vehicleNumber.trim().toUpperCase(Locale.ROOT));
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
@@ -126,18 +115,40 @@ public class CustomerDAO {
                 }
             }
         }
-
         return null;
     }
 
-    // Display customers and their linked vehicles.
-    public void displayAllCustomers() throws SQLException {
+    public String findCustomerNameByVehicleNumber(String vehicleNumber) throws SQLException {
+        String sql = """
+                SELECT c.name
+                FROM vehicles v
+                JOIN customers c ON v.customer_id = c.customer_id
+                WHERE v.registration_number = ?
+                """;
 
+        try (
+                Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setString(1, vehicleNumber.trim().toUpperCase(Locale.ROOT));
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getString("name");
+                }
+            }
+        }
+        return "Unknown Customer";
+    }
+
+    public List<CustomerRecord> getAllCustomers() throws SQLException {
+        List<CustomerRecord> list = new ArrayList<>();
         String sql = """
                 SELECT
                     c.customer_id,
                     c.name,
                     c.phone_number,
+                    c.email,
                     v.registration_number,
                     v.vehicle_type
                 FROM customers c
@@ -151,50 +162,42 @@ public class CustomerDAO {
                 PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet resultSet = statement.executeQuery()
         ) {
-            System.out.println("\n===== CUSTOMER LIST =====");
-
-            boolean customerFound = false;
-
             while (resultSet.next()) {
-                customerFound = true;
+                int id = resultSet.getInt("customer_id");
+                String name = resultSet.getString("name");
+                String phone = resultSet.getString("phone_number");
+                String email = resultSet.getString("email");
+                String reg = resultSet.getString("registration_number");
+                String vTypeStr = resultSet.getString("vehicle_type");
+                VehicleType vType = null;
+                if (vTypeStr != null) {
+                    try {
+                        vType = VehicleType.valueOf(vTypeStr.toUpperCase(Locale.ROOT));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
 
-                String vehicleNumber =
-                        resultSet.getString("registration_number");
-
-                String vehicleType =
-                        resultSet.getString("vehicle_type");
-
-                System.out.println(
-                        "Customer ID   : "
-                                + resultSet.getInt("customer_id")
-                );
-
-                System.out.println(
-                        "Name          : "
-                                + resultSet.getString("name")
-                );
-
-                System.out.println(
-                        "Phone         : "
-                                + resultSet.getString("phone_number")
-                );
-
-                System.out.println(
-                        "Vehicle Number: "
-                                + (vehicleNumber == null ? "-" : vehicleNumber)
-                );
-
-                System.out.println(
-                        "Vehicle Type  : "
-                                + (vehicleType == null ? "-" : vehicleType)
-                );
-
-                System.out.println("-------------------------");
+                list.add(new CustomerRecord(id, name, phone, email, reg, vType));
             }
+        }
+        return list;
+    }
 
-            if (!customerFound) {
-                System.out.println("No customers found.");
-            }
+    public void displayAllCustomers() throws SQLException {
+        List<CustomerRecord> list = getAllCustomers();
+        System.out.println("\n===== CUSTOMER LIST =====");
+        if (list.isEmpty()) {
+            System.out.println("No customers found.");
+            return;
+        }
+
+        for (CustomerRecord c : list) {
+            System.out.println("Customer ID   : " + c.customerId());
+            System.out.println("Name          : " + c.name());
+            System.out.println("Phone         : " + c.phoneNumber());
+            System.out.println("Vehicle Number: " + (c.registrationNumber() == null ? "-" : c.registrationNumber()));
+            System.out.println("Vehicle Type  : " + (c.vehicleType() == null ? "-" : c.vehicleType()));
+            System.out.println("-------------------------");
         }
     }
 }
