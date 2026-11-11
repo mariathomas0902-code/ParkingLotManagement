@@ -4,11 +4,24 @@ import parkingmanagement.ParkingLotService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 
 public class MainFrame extends JFrame {
+
+    private static final Color SIDEBAR_BACKGROUND =
+            new Color(15, 23, 42);
+
+    private static final Color BUTTON_BACKGROUND =
+            new Color(30, 41, 59);
+
+    private static final Color SELECTED_BACKGROUND =
+            new Color(37, 99, 235);
+
+    private static final Color SELECTED_INDICATOR =
+            new Color(147, 197, 253);
 
     private final CardLayout cardLayout;
     private final JPanel contentPanel;
@@ -23,10 +36,8 @@ public class MainFrame extends JFrame {
     private CustomerDirectoryPanel customerDirectoryPanel;
 
     private final Map<String, JButton> menuButtons = new HashMap<>();
-    private String currentScreen = "DASHBOARD";
-    private JLabel dbStatusLabel;
 
-    private static final Color TRANSPARENT_COLOR = new Color(0, 0, 0, 0);
+    private JLabel dbStatusLabel;
 
     public MainFrame() {
         this.service = new ParkingLotService();
@@ -47,7 +58,7 @@ public class MainFrame extends JFrame {
         rootContainer.add(createSidebar(), BorderLayout.WEST);
         rootContainer.add(contentPanel, BorderLayout.CENTER);
 
-        add(rootContainer);
+        setContentPane(rootContainer);
 
         showScreen("DASHBOARD");
     }
@@ -58,7 +69,8 @@ public class MainFrame extends JFrame {
         exitVehiclePanel = new ExitVehiclePanel(service, this);
         availableSpacesPanel = new AvailableSpacesPanel(service, this);
         parkedVehiclesPanel = new ParkedVehiclesPanel(service, this);
-        transactionHistoryPanel = new TransactionHistoryPanel(service, this);
+        transactionHistoryPanel =
+                new TransactionHistoryPanel(service, this);
         customerDirectoryPanel = new CustomerDirectoryPanel(service);
 
         contentPanel.add(dashboardPanel, "DASHBOARD");
@@ -73,11 +85,13 @@ public class MainFrame extends JFrame {
     private JPanel createSidebar() {
         JPanel sidebar = new JPanel(new BorderLayout());
         sidebar.setPreferredSize(new Dimension(240, 740));
-        sidebar.setBackground(UITheme.SIDEBAR_BG);
+        sidebar.setBackground(SIDEBAR_BACKGROUND);
 
-        // Header / Logo
+        // Header and logo
         JPanel logoPanel = new JPanel();
-        logoPanel.setLayout(new BoxLayout(logoPanel, BoxLayout.Y_AXIS));
+        logoPanel.setLayout(
+                new BoxLayout(logoPanel, BoxLayout.Y_AXIS)
+        );
         logoPanel.setOpaque(false);
         logoPanel.setBorder(new EmptyBorder(28, 20, 24, 20));
 
@@ -95,9 +109,11 @@ public class MainFrame extends JFrame {
 
         sidebar.add(logoPanel, BorderLayout.NORTH);
 
-        // Menu items
+        // Sidebar menu
         JPanel menuPanel = new JPanel();
-        menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
+        menuPanel.setLayout(
+                new BoxLayout(menuPanel, BoxLayout.Y_AXIS)
+        );
         menuPanel.setOpaque(false);
         menuPanel.setBorder(new EmptyBorder(10, 14, 10, 14));
 
@@ -111,20 +127,23 @@ public class MainFrame extends JFrame {
 
         sidebar.add(menuPanel, BorderLayout.CENTER);
 
-        // Bottom Footer (Connection Status & Quick Action)
+        // Footer
         JPanel footer = new JPanel();
-        footer.setLayout(new BoxLayout(footer, BoxLayout.Y_AXIS));
+        footer.setLayout(
+                new BoxLayout(footer, BoxLayout.Y_AXIS)
+        );
         footer.setOpaque(false);
         footer.setBorder(new EmptyBorder(15, 18, 20, 18));
 
-        boolean isDb = service.isDatabaseConnected();
-        dbStatusLabel = new JLabel(isDb ? "* MySQL Online" : "* Demo Mode (In-Memory)");
-        dbStatusLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        dbStatusLabel.setForeground(isDb ? UITheme.SUCCESS_GREEN : UITheme.WARNING_AMBER);
+        dbStatusLabel = new JLabel();
+        dbStatusLabel.setFont(
+                new Font("Segoe UI", Font.BOLD, 12)
+        );
+        updateConnectionStatus();
 
         JLabel authorLabel = new JLabel("OOP Micro Project");
         authorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        authorLabel.setForeground(new Color(100, 116, 139));
+        authorLabel.setForeground(new Color(148, 163, 184));
 
         footer.add(dbStatusLabel);
         footer.add(Box.createVerticalStrut(4));
@@ -135,20 +154,29 @@ public class MainFrame extends JFrame {
         return sidebar;
     }
 
-    private void addMenuButton(JPanel parent, String label, String screenName) {
+    private void addMenuButton(
+            JPanel parent,
+            String label,
+            String screenName
+    ) {
         JButton button = new JButton(label);
-        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        button.setForeground(new Color(203, 213, 225));
-        button.setBackground(UITheme.SIDEBAR_BG);
+
+        // Prevent the native system theme from replacing our colours.
+        button.setUI(new BasicButtonUI());
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(true);
         button.setFocusPainted(false);
+
+        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
         button.setHorizontalAlignment(SwingConstants.LEFT);
         button.setMaximumSize(new Dimension(212, 42));
         button.setPreferredSize(new Dimension(212, 42));
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 3, 0, 0, TRANSPARENT_COLOR),
-                new EmptyBorder(0, 14, 0, 10)
-        ));
+        button.setCursor(
+                Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        );
+
+        applyMenuButtonStyle(button, false);
 
         button.addActionListener(e -> showScreen(screenName));
 
@@ -157,31 +185,50 @@ public class MainFrame extends JFrame {
         parent.add(Box.createVerticalStrut(6));
     }
 
-    public void showScreen(String screenName) {
-        this.currentScreen = screenName;
-        cardLayout.show(contentPanel, screenName);
+    private void applyMenuButtonStyle(
+            JButton button,
+            boolean selected
+    ) {
+        Color background = selected
+                ? SELECTED_BACKGROUND
+                : BUTTON_BACKGROUND;
 
-        // Update button styles
-        for (Map.Entry<String, JButton> entry : menuButtons.entrySet()) {
-            JButton btn = entry.getValue();
-            if (entry.getKey().equalsIgnoreCase(screenName)) {
-                btn.setBackground(new Color(30, 41, 59));
-                btn.setForeground(Color.WHITE);
-                btn.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createMatteBorder(0, 3, 0, 0, UITheme.PRIMARY_BLUE),
+        Color indicator = selected
+                ? SELECTED_INDICATOR
+                : background;
+
+        button.setBackground(background);
+        button.setForeground(Color.WHITE);
+
+        button.setBorder(
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createMatteBorder(
+                                0, 3, 0, 0, indicator
+                        ),
                         new EmptyBorder(0, 14, 0, 10)
-                ));
-            } else {
-                btn.setBackground(UITheme.SIDEBAR_BG);
-                btn.setForeground(new Color(203, 213, 225));
-                btn.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createMatteBorder(0, 3, 0, 0, TRANSPARENT_COLOR),
-                        new EmptyBorder(0, 14, 0, 10)
-                ));
-            }
+                )
+        );
+
+        button.repaint();
+    }
+
+    public void showScreen(String screenName) {
+        // Ignore unknown screen names.
+        if (!menuButtons.containsKey(screenName)) {
+            return;
         }
 
-        // Auto-refresh panel contents on navigate
+        cardLayout.show(contentPanel, screenName);
+
+        // Highlight the selected sidebar button.
+        for (Map.Entry<String, JButton> entry
+                : menuButtons.entrySet()) {
+
+            boolean selected = entry.getKey().equals(screenName);
+            applyMenuButtonStyle(entry.getValue(), selected);
+        }
+
+        // Refresh the selected screen.
         switch (screenName) {
             case "DASHBOARD" -> dashboardPanel.refreshData();
             case "PARK" -> parkVehiclePanel.updateTypeInfo();
@@ -189,13 +236,27 @@ public class MainFrame extends JFrame {
             case "AVAILABLE" -> availableSpacesPanel.refreshSpaces();
             case "PARKED" -> parkedVehiclesPanel.refreshParkedList();
             case "HISTORY" -> transactionHistoryPanel.refreshHistory();
-            case "CUSTOMERS" -> customerDirectoryPanel.refreshCustomers();
+            case "CUSTOMERS" ->
+                    customerDirectoryPanel.refreshCustomers();
         }
 
-        // Update connection status
-        boolean isDb = service.isDatabaseConnected();
-        dbStatusLabel.setText(isDb ? "* MySQL Online" : "* Demo Mode (In-Memory)");
-        dbStatusLabel.setForeground(isDb ? UITheme.SUCCESS_GREEN : UITheme.WARNING_AMBER);
+        updateConnectionStatus();
+    }
+
+    private void updateConnectionStatus() {
+        boolean connected = service.isDatabaseConnected();
+
+        dbStatusLabel.setText(
+                connected
+                        ? "* MySQL Online"
+                        : "* Demo Mode (In-Memory)"
+        );
+
+        dbStatusLabel.setForeground(
+                connected
+                        ? UITheme.SUCCESS_GREEN
+                        : UITheme.WARNING_AMBER
+        );
     }
 
     public void refreshAllScreens() {
@@ -207,9 +268,7 @@ public class MainFrame extends JFrame {
         transactionHistoryPanel.refreshHistory();
         customerDirectoryPanel.refreshCustomers();
 
-        boolean isDb = service.isDatabaseConnected();
-        dbStatusLabel.setText(isDb ? "* MySQL Online" : "* Demo Mode (In-Memory)");
-        dbStatusLabel.setForeground(isDb ? UITheme.SUCCESS_GREEN : UITheme.WARNING_AMBER);
+        updateConnectionStatus();
     }
 
     public ExitVehiclePanel getExitPanel() {
